@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import Image from 'next/image';
+import Link from 'next/link';
 import {
   Box, Typography, Paper,
   CircularProgress, Alert,
@@ -9,6 +10,7 @@ import Autocomplete from '@mui/material/Autocomplete';
 import TextField from '@mui/material/TextField';
 import DeleteIcon from '@mui/icons-material/Delete';
 import SyncIcon from '@mui/icons-material/Sync';
+import VisibilityIcon from '@mui/icons-material/Visibility';
 
 const QUEUE_KEY = 'attendance_queue';
 
@@ -172,9 +174,28 @@ export default function CombinedApp() {
           </Box>
         ) : (
           <Box sx={{ maxWidth: 500, margin: 'auto', p: 3 }}>
-            <Typography variant="h4" align="center" sx={{ color: 'primary.main', mb: 4 }}>
-              تسجيل الحضور
-            </Typography>
+            <Box sx={{ 
+              display: 'flex', 
+              justifyContent: 'space-between', 
+              alignItems: 'center', 
+              mb: 4 
+            }}>
+              <Typography variant="h4" sx={{ color: 'primary.main' }}>
+                تسجيل الحضور
+              </Typography>
+              <Link href="/attendance-view" passHref>
+                <IconButton 
+                  color="primary" 
+                  component="a"
+                  sx={{ 
+                    backgroundColor: 'white',
+                    '&:hover': { backgroundColor: '#f5f5f5' }
+                  }}
+                >
+                  <VisibilityIcon />
+                </IconButton>
+              </Link>
+            </Box>
             <Paper elevation={3} sx={{ p: 3, borderRadius: 2, backgroundColor: 'white', mb: 3 }}>
               {loading ? (
                 <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
