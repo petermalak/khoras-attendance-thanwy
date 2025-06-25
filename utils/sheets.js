@@ -206,3 +206,30 @@ export async function updateRowScore(rowIndex, newScore) {
     throw error;
   }
 }
+
+// Get header row (dates) and names column
+export async function getAttendanceSheetStructure(sheetName) {
+  const response = await sheets.spreadsheets.values.get({
+    spreadsheetId: SHEET_ID,
+    range: `${sheetName}!A1:ZZ1000`, // Large range to cover all columns/rows
+  });
+  const rows = response.data.values || [];
+  if (rows.length === 0) return { headers: [], names: [] };
+  const headers = rows[0];
+  // Names are in the column with header "الاسم"
+  const nameColIndex = headers.findIndex(h => h.trim() === "الاسم");
+  const names = rows.slice(1).map(row => row[nameColIndex]);
+  return { headers, names, nameColIndex, rows };
+}
+
+// Mark attendance: set 1 for (name, date)
+export async function markAttendance(sheetName, name, date) {
+  const { headers, names, nameColIndex, rows } = await getAttendanceSheetStructure(sheetName);
+  const dateColIndex = headers.findIndex(h => h.trim() === date.trim());
+  if (dateColIndex === -1) throw new Error('Date not found');
+  const rowIndex = names.findIndex(n => n && n.trim() === name.trim());
+  if (rowIndex === -1) throw new Error('Name not found');
+  // Sheet rows are 1-indexed, +2 for header and 0-index
+  const cell = String.fromCharCode(65 + dateColIndex) + (rowIndex + 2);
+  return updateCell(sheetName, cell, 1);
+}

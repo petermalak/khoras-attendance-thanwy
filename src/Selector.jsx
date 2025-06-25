@@ -1,766 +1,231 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Box, Typography, Paper,
   CircularProgress, Alert,
-  Button, TextField,
-  List, ListItem, ListItemText,
-  ListItemSecondaryAction, IconButton,
-  Divider, Card, CardContent,
-  FormControl, InputLabel, Select, MenuItem,
-  Grid, Snackbar,
-  InputAdornment,
-  Tooltip,
-  Fab,
-  LinearProgress,
-  Autocomplete
+  Button, FormControl, InputLabel, Select, MenuItem, Snackbar, Grid, List, ListItem, ListItemText, IconButton, Divider, LinearProgress
 } from '@mui/material';
-import { useRouter } from 'next/router';
-import { 
-  Delete as DeleteIcon, 
-  Construction as ConstructionIcon, 
-  Add as AddIcon,
-  Sync as SyncIcon,
-  QrCodeScanner as QrCodeIcon,
-  ListAlt as ListAltIcon,
-  Search as SearchIcon
-} from '@mui/icons-material';
-import { AnimatePresence, motion } from 'framer-motion';
+import Autocomplete from '@mui/material/Autocomplete';
+import TextField from '@mui/material/TextField';
+import DeleteIcon from '@mui/icons-material/Delete';
+import SyncIcon from '@mui/icons-material/Sync';
+
+const QUEUE_KEY = 'attendance_queue';
 
 const Selector = () => {
-  const [codes, setCodes] = useState([]);
+  const [names, setNames] = useState([]);
+  const [dates, setDates] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [selectedCode, setSelectedCode] = useState(null);
-  const [selectedValue, setSelectedValue] = useState("");
-  const [selectedCodes, setSelectedCodes] = useState([]);
-  const [pendingUpdates, setPendingUpdates] = useState([]);
-  const [syncing, setSyncing] = useState(false);
+  const [selectedName, setSelectedName] = useState("");
+  const [selectedDate, setSelectedDate] = useState("");
   const [success, setSuccess] = useState(false);
-  const [apiResponse, setApiResponse] = useState(null);
-  const [progress, setProgress] = useState(0);
-  const [currentUpdate, setCurrentUpdate] = useState(0);
-  const [processedUsers, setProcessedUsers] = useState({});
-  const [headers, setHeaders] = useState(null);
-  const [headersLastUpdated, setHeadersLastUpdated] = useState(null);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [isOnline, setIsOnline] = useState(true);
-  const [syncQueue, setSyncQueue] = useState([]);
-  const [lastSyncAttempt, setLastSyncAttempt] = useState(null);
-  const [syncStatus, setSyncStatus] = useState('idle'); // 'idle' | 'syncing' | 'queued' | 'error'
+  const [queue, setQueue] = useState([]);
+  const [syncing, setSyncing] = useState(false);
   const [syncError, setSyncError] = useState(null);
-  const router = useRouter();
+  const [isOnline, setIsOnline] = useState(true);
+  const syncIndex = useRef(0);
+  const [progress, setProgress] = useState(0);
 
-  // Hardcoded headers
-  const HEADERS = ['ID', 'CodeValue', 'Name', 'Class', 'Team', 'Score'];
-
+  // Load queue from localStorage
   useEffect(() => {
-    const fetchCodes = async () => {
-      try {
-        const response = await fetch("/api/codes");
-        if (!response.ok) {
-          throw new Error("Failed to fetch codes");
-        }
-        const data = await response.json();
-        console.log('Fetched codes:', data); // Debug log
-        if (Array.isArray(data)) {
-          setCodes(data);
-        } else {
-          console.error('Invalid data format received:', data);
-          setCodes([]);
-        }
-      } catch (error) {
-        console.error("Error fetching codes:", error);
-        setError("حدث خطأ أثناء جلب الأكواد");
-        setCodes([]);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchCodes();
+    const savedQueue = localStorage.getItem(QUEUE_KEY);
+    if (savedQueue) setQueue(JSON.parse(savedQueue));
   }, []);
 
-  // Initialize online status after mount
+  // Persist queue to localStorage
   useEffect(() => {
-    setIsOnline(navigator.onLine);
-  }, []);
+    localStorage.setItem(QUEUE_KEY, JSON.stringify(queue));
+  }, [queue]);
 
-  // Network status monitoring
+  // Online/offline detection
   useEffect(() => {
-    const handleOnline = () => {
-      setIsOnline(true);
-      if (syncQueue.length > 0) {
-        handleSyncQueue();
-      }
-    };
-
-    const handleOffline = () => {
-      setIsOnline(false);
-    };
-
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
-
+    setIsOnline(navigator.onLine);
     return () => {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
     };
-  }, [syncQueue]);
+  }, []);
 
-  // Function to get headers with caching
-  const getHeadersWithCache = async () => {
-    // Check if we have valid cached headers (less than 5 minutes old)
-    if (headers && headersLastUpdated) {
-      const cacheAge = new Date() - new Date(headersLastUpdated);
-      if (cacheAge < 5 * 60 * 1000) { // 5 minutes
-        return headers;
+  useEffect(() => {
+    const fetchData = async () => {
+      setLoading(true);
+      try {
+        const response = await fetch('/api/codes');
+        if (!response.ok) throw new Error('Failed to fetch data');
+        const data = await response.json();
+        // Remove 'الاسم' and the first date column (usually 'م')
+        let dateHeaders = data.headers.filter(h => h && h !== 'الاسم');
+        if (dateHeaders.length > 0) dateHeaders = dateHeaders.slice(1); // skip the first column ("م")
+        setNames(data.names.filter(Boolean));
+        setDates(dateHeaders);
+        // Set today's date as default if it exists
+        const today = new Date();
+        const todayStr = today.toLocaleDateString('en-GB', {
+          day: '2-digit', month: 'short', year: 'numeric'
+        }).replace(/ /g, ' ');
+        const found = dateHeaders.find(d => d.trim() === todayStr.trim());
+        setSelectedDate(found || "");
+      } catch (err) {
+        setError('حدث خطأ أثناء جلب البيانات');
+      } finally {
+        setLoading(false);
       }
-    }
+    };
+    fetchData();
+  }, []);
 
-    // If no valid cache, fetch headers
-    try {
-      const response = await fetch('/api/headers/');
-      if (!response.ok) {
-        throw new Error('Failed to fetch headers');
-      }
-      const data = await response.json();
-      
-      // Update cache
-      setHeaders(data);
-      setHeadersLastUpdated(new Date().toISOString());
-      
-      return data;
-    } catch (error) {
-      console.error('Error fetching headers:', error);
-      return null;
-    }
-  };
-
-  // Filter codes based on search query
-  const filteredCodes = codes.filter(code => {
-    const searchLower = searchQuery.toLowerCase();
-    return (
-      code.code.toLowerCase().includes(searchLower) ||
-      code.name.toLowerCase().includes(searchLower) ||
-      code.class.toLowerCase().includes(searchLower)
-    );
-  });
-
-  // Check if a code is already selected
-  const isCodeSelected = (code) => {
-    return pendingUpdates.some(update => update.qrCode === code.code);
-  };
-
-  const handleCodeChange = (event, newValue) => {
-    setSelectedCode(newValue);
-  };
-
-  const handleValueChange = (event) => {
-    setSelectedValue(event.target.value);
-  };
-
-  const handleSearchChange = (event) => {
-    setSearchQuery(event.target.value);
-  };
-
-  const handleAddCode = () => {
-    if (selectedCode && selectedValue && !isCodeSelected(selectedCode)) {
-      setPendingUpdates(prev => [...prev, {
-        qrCode: selectedCode.code,
-        selectedValue: parseInt(selectedValue, 10),
-        timestamp: new Date().toISOString()
-      }]);
-      setSelectedCode(null);
-      setSelectedValue("");
-    }
-  };
-
-  const handleRemoveCode = (codeToRemove) => {
-    setPendingUpdates(prev => prev.filter(update => update.qrCode !== codeToRemove));
-  };
-
-  const handleCloseSnackbar = () => {
-    setError(null);
-    setSuccess(false);
-  };
-
-  const handleSyncQueue = async () => {
-    if (!isOnline || syncQueue.length === 0) return;
-
-    setSyncing(true);
-    setProgress(0);
-    setCurrentUpdate(0);
-    setProcessedUsers({});
-
-    try {
-      // Process each update in the queue
-      for (let i = 0; i < syncQueue.length; i++) {
-        const update = syncQueue[i];
-        setCurrentUpdate(i + 1);
-        setProgress((i / syncQueue.length) * 100);
-
-        const response = await fetch('/api/submit', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            updates: [{
-              qrCode: update.qrCode,
-              selectedValue: update.selectedValue
-            }]
-          }),
-        });
-
-        if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.message || 'Failed to submit score');
-        }
-
-        const result = await response.json();
-        
-        if (!result.success) {
-          throw new Error(result.message || 'Failed to submit score');
-        }
-
-        // Update processed users cache
-        setProcessedUsers(prev => ({
-          ...prev,
-          [update.qrCode]: {
-            ...result.data,
-            lastUpdated: new Date().toISOString()
-          }
-        }));
-      }
-
-      // All updates processed successfully
-      setSuccess(true);
-      setSyncQueue([]);
-      setProcessedUsers({});
-      setProgress(100);
-      setCurrentUpdate(0);
-      setSyncStatus('idle');
-    } catch (error) {
-      console.error('Error syncing updates:', error);
-      setSyncError(error.message);
-      setSyncStatus('error');
-      // Keep failed updates in queue
-      setSyncQueue(prev => prev.slice(currentUpdate));
-    } finally {
-      setSyncing(false);
-    }
-  };
-
-  const syncUpdates = async () => {
-    if (pendingUpdates.length === 0) return;
-
-    if (!isOnline) {
-      setSyncQueue(prev => [...prev, ...pendingUpdates]);
-      setSyncStatus('queued');
-      setPendingUpdates([]);
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (!selectedName || !selectedDate) {
+      setError('يرجى اختيار الاسم والتاريخ');
       return;
     }
+    setError(null);
+    // Prevent duplicate in queue
+    if (queue.some(q => q.name === selectedName && q.date === selectedDate)) {
+      setError('هذا الحضور موجود بالفعل في قائمة الانتظار');
+      return;
+    }
+    setQueue(prev => [...prev, { name: selectedName, date: selectedDate }]);
+    setSuccess(true);
+    setSelectedName("");
+    setSelectedDate("");
+  };
 
+  const handleRemoveFromQueue = (idx) => {
+    setQueue(prev => prev.filter((_, i) => i !== idx));
+  };
+
+  const handleSync = async () => {
+    if (queue.length === 0) return;
     setSyncing(true);
+    setSyncError(null);
     setProgress(0);
-    setCurrentUpdate(0);
-    setProcessedUsers({});
-
-    try {
-      const response = await fetch('/api/submit', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          updates: pendingUpdates.map(update => ({
-            qrCode: update.qrCode,
-            selectedValue: update.selectedValue
-          }))
-        }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'Failed to submit score');
-      }
-
-      const result = await response.json();
-      
-      if (result.success) {
-        setSuccess(true);
-        setPendingUpdates([]);
-        setProcessedUsers({});
-        setProgress(100);
-        setCurrentUpdate(0);
-        setSyncStatus('idle');
-      } else {
-        throw new Error(result.message || 'Failed to submit score');
-      }
-    } catch (error) {
-      console.error('Error syncing updates:', error);
-      setSyncError(error.message);
-      setSyncStatus('error');
-      setSyncQueue(prev => [...prev, ...pendingUpdates]);
-      setPendingUpdates([]);
-    } finally {
-      setSyncing(false);
-    }
-  };
-
-  // Function to get user data (either from cache or API)
-  const getUserData = async (qrCode) => {
-    // Check cache first
-    const cachedData = processedUsers[qrCode];
-    if (cachedData) {
-      // Check if cache is still valid (less than 5 minutes old)
-      const cacheAge = new Date() - new Date(cachedData.lastUpdated);
-      if (cacheAge < 5 * 60 * 1000) { // 5 minutes
-        return cachedData;
-      }
-    }
-
-    // If not in cache or cache expired, fetch from API
-    try {
-      const response = await fetch(`/api/user/${qrCode}/`);
-      if (!response.ok) {
-        throw new Error('Failed to fetch user data');
-      }
-      const data = await response.json();
-      
-      // Update cache
-      setProcessedUsers(prev => ({
-        ...prev,
-        [qrCode]: {
-          ...data,
-          lastUpdated: new Date().toISOString()
+    syncIndex.current = 0;
+    let newQueue = [...queue];
+    for (let i = 0; i < queue.length; i++) {
+      const { name, date } = queue[i];
+      try {
+        const res = await fetch('/api/attendance', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, date })
+        });
+        if (!res.ok) {
+          const data = await res.json();
+          throw new Error(data.message || 'فشل تسجيل الحضور');
         }
-      }));
-      
-      return data;
-    } catch (error) {
-      console.error('Error fetching user data:', error);
-      return null;
-    }
-  };
-
-  const buildInfoRow = (label, value, isBold = false) => (
-    <Box sx={{ 
-      display: 'flex', 
-      justifyContent: 'space-between', 
-      py: 1,
-      '& > *': {
-        fontWeight: isBold ? 'bold' : 'normal',
-        fontSize: '1rem'
+        // Remove from queue if successful
+        newQueue[i] = null;
+        syncIndex.current = i + 1;
+        setProgress(Math.round(((i + 1) / queue.length) * 100));
+      } catch (err) {
+        setSyncError(`خطأ في مزامنة الحضور: ${name} (${date}) - ${err.message}`);
+        break;
       }
-    }}>
-      <Typography>{label}</Typography>
-      <Typography>{value}</Typography>
-    </Box>
-  );
+    }
+    // Remove all successfully synced
+    setQueue(newQueue.filter(Boolean));
+    setSyncing(false);
+    setProgress(0);
+    if (!syncError) setSuccess(true);
+  };
 
   return (
-    <Box sx={{ 
-      maxWidth: 800, 
-      margin: "auto", 
-      p: 3,
-      backgroundColor: '#f9f5e1',
-      minHeight: '100vh',
-      position: 'relative'
-    }}>
-      <Box sx={{ display: 'flex', justifyContent: 'center', mb: 3 }}>
-        <Button
-          variant="contained"
-          startIcon={<QrCodeIcon />}
-          onClick={() => router.push('/scanner')}
-          sx={{
-            bgcolor: '#2e7d32',
-            color: '#fff',
-            '&:hover': {
-              bgcolor: '#2e7d32',
-              opacity: 0.9
-            }
-          }}
-        >
-          ماسح QR
-        </Button>
-      </Box>
-
-      {syncing && (
-        <Paper 
-          elevation={3} 
-          sx={{ 
-            p: 2, 
-            mb: 3, 
-            backgroundColor: 'white',
-            borderRadius: 2,
-            border: '1px solid rgba(46, 125, 50, 0.1)'
-          }}
-        >
-          <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-            <Typography variant="subtitle1" color="text.secondary" sx={{ flex: 1 }}>
-              جاري المعالجة
-            </Typography>
-            <Typography variant="subtitle1" color="primary" sx={{ fontWeight: 'bold' }}>
-              {currentUpdate} من {pendingUpdates.length}
-            </Typography>
-          </Box>
-          <LinearProgress 
-            variant="determinate" 
-            value={progress} 
-            sx={{ 
-              height: 8,
-              borderRadius: 4,
-              backgroundColor: 'rgba(46, 125, 50, 0.1)',
-              '& .MuiLinearProgress-bar': {
-                backgroundColor: '#2e7d32',
-                borderRadius: 4,
-                transition: 'transform 0.4s linear'
-              }
-            }}
-          />
-          <Typography 
-            variant="body2" 
-            color="text.secondary" 
-            align="center" 
-            sx={{ mt: 1 }}
-          >
-            {Math.round(progress)}%
-          </Typography>
-        </Paper>
-      )}
-
-      <Typography 
-        variant="h4" 
-        component="h1" 
-        gutterBottom 
-        align="center" 
-        sx={{ color: '#2e7d32', mb: 4 }}
-      >
-        إضافة النقاط
+    <Box sx={{ maxWidth: 500, margin: 'auto', p: 3, backgroundColor: '#f9f5e1', minHeight: '100vh' }}>
+      <Typography variant="h4" align="center" sx={{ color: 'primary.main', mb: 4 }}>
+        تسجيل الحضور
       </Typography>
-
-      {/* Network Status and Error Messages */}
-      <AnimatePresence>
-        {syncError && (
-          <motion.div
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-          >
-            <Alert 
-              severity="error" 
-              onClose={() => setSyncError(null)}
-              sx={{ mb: 2 }}
-            >
-              {syncError}
-            </Alert>
-          </motion.div>
-        )}
-        {!isOnline && (
-          <motion.div
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-          >
-            <Alert 
-              severity="warning" 
-              sx={{ mb: 2 }}
-            >
-              أنت غير متصل بالإنترنت. سيتم حفظ التحديثات وتنفيذها عند عودة الاتصال.
-            </Alert>
-          </motion.div>
-        )}
-        {syncStatus === 'queued' && (
-          <motion.div
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-          >
-            <Alert 
-              severity="info" 
-              sx={{ mb: 2 }}
-            >
-              لديك {syncQueue.length} تحديثات في الانتظار. سيتم تنفيذها عند عودة الاتصال.
-            </Alert>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      <Grid container spacing={3}>
-        <Grid item xs={12} md={6}>
-          <Paper 
-            elevation={3} 
-            sx={{ 
-              p: 3, 
-              borderRadius: 2,
-              backgroundColor: 'white',
-              height: '100%'
-            }}
-          >
-            <Typography 
-              variant="h6" 
-              sx={{ 
-                mb: 2,
-                color: '#000000',
-                fontWeight: 'bold'
-              }}
-            >
-              إضافة كود جديد
-            </Typography>
-
-            {loading ? (
-              <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
-                <CircularProgress />
-              </Box>
-            ) : error ? (
-              <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>
-            ) : (
-              <>
-                <FormControl fullWidth sx={{ mb: 2 }}>
-                  <Autocomplete
-                    value={selectedCode}
-                    onChange={handleCodeChange}
-                    options={codes.filter(code => !isCodeSelected(code))}
-                    getOptionLabel={(option) => `${option.code}`}
-                    renderInput={(params) => (
-                      <TextField
-                        {...params}
-                        label="اختر الكود"
-                        sx={{ textAlign: "right" }}
-                      />
-                    )}
-                    renderOption={(props, option) => (
-                      <li {...props}>
-                        <Box sx={{ display: 'flex', flexDirection: 'column' }}>
-                          <Typography variant="body1">
-                            {option.code}
-                          </Typography>
-                        </Box>
-                      </li>
-                    )}
-                    isOptionEqualToValue={(option, value) => option.code === value.code}
-                    noOptionsText="لا توجد نتائج"
-                    loadingText="جاري التحميل..."
-                    sx={{
-                      '& .MuiOutlinedInput-root': {
-                        '& fieldset': {
-                          borderColor: 'rgba(0, 0, 0, 0.23)',
-                        },
-                        '&:hover fieldset': {
-                          borderColor: '#f9d950',
-                        },
-                        '&.Mui-focused fieldset': {
-                          borderColor: '#f9d950',
-                        },
-                      },
-                      '& .MuiInputLabel-root.Mui-focused': {
-                        color: '#f9d950',
-                      },
-                    }}
-                  />
-                </FormControl>
-
-                <FormControl fullWidth sx={{ mb: 2 }}>
-                  <InputLabel>اختيار النقاط</InputLabel>
-                  <Select
-                    value={selectedValue}
-                    onChange={handleValueChange}
-                    label="اختيار النقاط"
-                    sx={{
-                      bgcolor: 'white',
-                      borderRadius: 2
-                    }}
-                  >
-                    <MenuItem value="50">
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <ConstructionIcon sx={{ color: 'yellow' }} />
-                        <Typography>حضور اول ١٠ دقايق = ٥٠ طوبة</Typography>
-                      </Box>
-                    </MenuItem>
-                    <MenuItem value="25">
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <ConstructionIcon sx={{ color: 'yellow' }} />
-                        <Typography>حضور تاني ١٠ دقايق = ٢٥ طوبة</Typography>
-                      </Box>
-                    </MenuItem>
-                    <MenuItem value="10">
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <ConstructionIcon sx={{ color: 'yellow' }} />
-                        <Typography>مشاركة في الموضوع = ١٠ طوبات</Typography>
-                      </Box>
-                    </MenuItem>
-                  </Select>
-                </FormControl>
-
-                <Button
-                  variant="contained"
-                  onClick={handleAddCode}
-                  disabled={!selectedCode || !selectedValue}
-                  fullWidth
-                  startIcon={<AddIcon />}
-                  sx={{
-                    bgcolor: '#f9d950',
-                    color: '#000000',
-                    '&:hover': {
-                      bgcolor: '#f9d950',
-                      opacity: 0.9
-                    }
-                  }}
-                >
-                  إضافة إلى القائمة
-                </Button>
-              </>
-            )}
-          </Paper>
-        </Grid>
-
-        <Grid item xs={12} md={6}>
-          <Paper 
-            elevation={3} 
-            sx={{ 
-              p: 3, 
-              borderRadius: 2,
-              backgroundColor: 'white',
-              height: '100%',
-              display: 'flex',
-              flexDirection: 'column'
-            }}
-          >
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-              <Typography 
-                variant="h6" 
-                sx={{ 
-                  color: '#000000',
-                  fontWeight: 'bold'
-                }}
+      <Paper elevation={3} sx={{ p: 3, borderRadius: 2, backgroundColor: 'white', mb: 3 }}>
+        {loading ? (
+          <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
+            <CircularProgress />
+          </Box>
+        ) : (
+          <form onSubmit={handleSubmit}>
+            <FormControl fullWidth sx={{ mb: 2 }}>
+              <Autocomplete
+                options={names}
+                value={selectedName}
+                onChange={(e, newValue) => setSelectedName(newValue || "")}
+                renderInput={(params) => <TextField {...params} label="الاسم" />}
+                isOptionEqualToValue={(option, value) => option === value}
+                noOptionsText="لا توجد نتائج"
+              />
+            </FormControl>
+            <FormControl fullWidth sx={{ mb: 2 }}>
+              <InputLabel>التاريخ</InputLabel>
+              <Select
+                value={selectedDate}
+                label="التاريخ"
+                onChange={e => setSelectedDate(e.target.value)}
               >
-                الكودات المختارة ({pendingUpdates.length})
+                {dates.map((date, idx) => (
+                  <MenuItem key={idx} value={date}>{date}</MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+            <Button type="submit" variant="contained" color="primary" fullWidth disabled={syncing}>
+              إضافة إلى قائمة الانتظار
+            </Button>
+          </form>
+        )}
+        {error && <Alert severity="error" sx={{ mt: 2 }}>{error}</Alert>}
+        <Snackbar
+          open={success}
+          autoHideDuration={3000}
+          onClose={() => setSuccess(false)}
+          message="تمت الإضافة إلى قائمة الانتظار أو تم المزامنة بنجاح"
+        />
+      </Paper>
+      <Paper elevation={2} sx={{ p: 2, borderRadius: 2, backgroundColor: 'white', mb: 3 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+          <Typography variant="h6" sx={{ flex: 1 }}>
+            قائمة الانتظار ({queue.length})
+          </Typography>
+          <Button
+            variant="contained"
+            color="primary"
+            startIcon={<SyncIcon />}
+            onClick={handleSync}
+            disabled={syncing || queue.length === 0 || !isOnline}
+          >
+            {syncing ? 'جاري المزامنة...' : 'مزامنة الكل'}
+          </Button>
+        </Box>
+        {syncing && (
+          <>
+            <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', mb: 0.5 }}>
+              <Typography variant="body2" color="text.secondary">
+                {Math.min(syncIndex.current, queue.length)} من {queue.length}
               </Typography>
-              <Button
-                variant="contained"
-                startIcon={<SyncIcon />}
-                onClick={syncUpdates}
-                disabled={syncing || pendingUpdates.length === 0}
-                sx={{
-                  bgcolor: '#f9d950',
-                  color: '#000000',
-                  '&:hover': {
-                    bgcolor: '#f9d950',
-                    opacity: 0.9
-                  }
-                }}
-              >
-                {syncing ? (
-                  <>
-                    <CircularProgress size={24} color="inherit" sx={{ mr: 1 }} />
-                    جاري المزامنة...
-                  </>
-                ) : !isOnline ? (
-                  'حفظ في الانتظار'
-                ) : (
-                  'مزامنة الكل'
-                )}
-              </Button>
             </Box>
-
-            {pendingUpdates.length === 0 ? (
-              <Box 
-                sx={{ 
-                  flex: 1,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  color: 'text.secondary'
-                }}
-              >
-                <Typography>لا توجد كودات مختارة</Typography>
-              </Box>
-            ) : (
-              <>
-                <List sx={{ flex: 1, overflow: 'auto' }}>
-                  {pendingUpdates.map((update, index) => (
-                    <React.Fragment key={update.qrCode}>
-                      <ListItem>
-                        <ListItemText 
-                          primary={update.qrCode}
-                          secondary={`النقاط: ${update.selectedValue} طوبة`}
-                          primaryTypographyProps={{
-                            dir: 'rtl',
-                            sx: { fontWeight: 'medium' }
-                          }}
-                          secondaryTypographyProps={{
-                            dir: 'rtl'
-                          }}
-                        />
-                        <ListItemSecondaryAction>
-                          <IconButton
-                            edge="end"
-                            aria-label="delete"
-                            onClick={() => handleRemoveCode(update.qrCode)}
-                          >
-                            <DeleteIcon />
-                          </IconButton>
-                        </ListItemSecondaryAction>
-                      </ListItem>
-                      {index < pendingUpdates.length - 1 && <Divider />}
-                    </React.Fragment>
-                  ))}
-                </List>
-              </>
-            )}
-          </Paper>
-        </Grid>
-      </Grid>
-
-      {apiResponse && (
-        <Card sx={{ mt: 3, borderRadius: 2 }}>
-          <CardContent>
-            <Typography 
-              variant="h6" 
-              align="center" 
-              sx={{ 
-                color: 'success.main',
-                fontWeight: 'bold',
-                mb: 2
-              }}
-            >
-              تم تسجيل النقاط بنجاح
-            </Typography>
-            {buildInfoRow("الاسم:", apiResponse.data.name)}
-            {buildInfoRow("الفصل:", apiResponse.data.class)}
-            {buildInfoRow("الفريق:", apiResponse.data.team)}
-            <Divider sx={{ my: 2 }} />
-            {buildInfoRow("النقاط السابقة:", `${apiResponse.data.oldScore} طوبة`, true)}
-            {buildInfoRow("النقاط الجديدة:", `${apiResponse.data.newScore} طوبة`, true)}
-            <Typography 
-              align="center" 
-              sx={{ 
-                mt: 2,
-                color: 'primary.main',
-                fontWeight: 'bold'
-              }}
-            >
-              تم إضافة {apiResponse.data.pointsAdded} طوبة
-            </Typography>
-          </CardContent>
-        </Card>
-      )}
-
-      <Snackbar
-        open={!!error || success}
-        autoHideDuration={6000}
-        onClose={handleCloseSnackbar}
-        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
-      >
-        <Alert
-          onClose={handleCloseSnackbar}
-          severity={success ? "success" : "error"}
-          sx={{ width: "100%" }}
-        >
-          {success ? "تم حفظ جميع التحديثات بنجاح!" : error}
-        </Alert>
-      </Snackbar>
+            <LinearProgress variant="determinate" value={progress} sx={{ mb: 2, height: 8, borderRadius: 4 }} />
+          </>
+        )}
+        <Divider sx={{ mb: 1 }} />
+        {queue.length === 0 ? (
+          <Typography color="text.secondary">لا توجد عناصر في قائمة الانتظار</Typography>
+        ) : (
+          <List>
+            {queue.map((item, idx) => (
+              <ListItem key={idx} secondaryAction={
+                <IconButton edge="end" aria-label="delete" onClick={() => handleRemoveFromQueue(idx)}>
+                  <DeleteIcon />
+                </IconButton>
+              }>
+                <ListItemText primary={item.name} secondary={item.date} />
+              </ListItem>
+            ))}
+          </List>
+        )}
+        {syncError && <Alert severity="error" sx={{ mt: 2 }}>{syncError}</Alert>}
+        {!isOnline && <Alert severity="warning" sx={{ mt: 2 }}>أنت غير متصل بالإنترنت. سيتم حفظ الحضور ومزامنته عند عودة الاتصال.</Alert>}
+      </Paper>
     </Box>
   );
 };

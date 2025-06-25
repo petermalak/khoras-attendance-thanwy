@@ -1,5 +1,5 @@
-import SplashScreen from '../src/SplashScreen';
+import Selector from '../src/Selector';
 
 export default function Home() {
-  return <SplashScreen />;
+  return <Selector />;
 }
