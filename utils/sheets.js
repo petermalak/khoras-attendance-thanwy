@@ -9,7 +9,7 @@ const SHEET_ID = process.env.SPREADSHEET_ID;
 
 const auth = new JWT({
   email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
-  key: process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
+  key: JSON.parse(process.env.GOOGLE_PRIVATE_KEY).private_key,
   scopes: ['https://www.googleapis.com/auth/spreadsheets'],
 });
 
