@@ -68,6 +68,7 @@ export default function CombinedApp() {
       window.removeEventListener('offline', handleOffline);
     };
   }, []);
+  
 
   // Fetch initial data
   useEffect(() => {
