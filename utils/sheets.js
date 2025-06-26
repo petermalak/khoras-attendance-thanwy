@@ -7,6 +7,9 @@ import { JWT } from 'google-auth-library';
 const SCOPES = ['https://www.googleapis.com/auth/spreadsheets'];
 const SHEET_ID = process.env.SPREADSHEET_ID;
 
+console.log("Service Account Email:", process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL ? "Loaded" : "Not Loaded");
+console.log("Private Key:", process.env.GOOGLE_PRIVATE_KEY ? "Loaded" : "Not Loaded");
+
 const auth = new JWT({
   email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
   key: JSON.parse(process.env.GOOGLE_PRIVATE_KEY).private_key,
