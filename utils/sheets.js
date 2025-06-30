@@ -213,10 +213,12 @@ export async function updateRowScore(rowIndex, newScore) {
 
 // Get header row (dates) and names column
 export async function getAttendanceSheetStructure(sheetName) {
-  const response = await sheets.spreadsheets.values.get({
+  const operation = () => sheets.spreadsheets.values.get({
     spreadsheetId: SHEET_ID,
     range: `${sheetName}!A1:ZZ1000`, // Large range to cover all columns/rows
   });
+
+  const response = await withRetry(operation, 'getAttendanceSheetStructure');
   const rows = response.data.values || [];
   if (rows.length === 0) return { headers: [], names: [] };
   const headers = rows[0];

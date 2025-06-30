@@ -88,6 +88,12 @@ export default function AttendanceView() {
   };
 
   const renderCellContent = (value, header) => {
+    console.log(header);
+    
+    if (header === 'رقم موبيل ' && value) {
+      const phoneNumber = `0${value}`;
+      return <a href={`tel:${phoneNumber}`} style={{ color: 'blue', textDecoration: 'underline' }}>{phoneNumber}</a>;
+    }
     if (header === 'الاسم' || header === 'مجموع الحضور' || header === 'كام مره اخد هدية') {
       return value;
     }
@@ -138,7 +144,6 @@ export default function AttendanceView() {
         <Link href="/" passHref>
           <IconButton 
             color="primary" 
-            component="a"
             sx={{ 
               backgroundColor: 'white',
               '&:hover': { backgroundColor: '#f5f5f5' }
