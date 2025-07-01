@@ -1,0 +1,40 @@
+/* styles/globals.css */
+body {
+  margin: 0;
+  padding: 0;
+  font-family: 'Tajawal', 'Cairo', 'Segoe UI', 'Arial', 'sans-serif';
+  background: #fdfcfa; /* Logo Off-White */
+  color: #44271c; /* Logo Brown */
+  direction: rtl;
+}
+
+html {
+  box-sizing: border-box;
+  scroll-behavior: smooth;
+}
+
+*, *:before, *:after {
+  box-sizing: inherit;
+}
+
+a {
+  color: #8c1d19; /* Logo Deep Red */
+  text-decoration: none;
+  transition: color 0.2s;
+}
+a:hover {
+  color: #eab368; /* Logo Gold */
+}
+
+button {
+  font-family: inherit;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  background: #eab368; /* Logo Gold */
+}
+::-webkit-scrollbar-thumb {
+  background: #9b7152; /* Logo Tan */
+  border-radius: 4px;
+} 

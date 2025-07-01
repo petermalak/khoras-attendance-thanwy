@@ -239,3 +239,170 @@ export async function markAttendance(sheetName, name, date) {
   const cell = String.fromCharCode(65 + dateColIndex) + (rowIndex + 2);
   return updateCell(sheetName, cell, 1);
 }
+
+// Get absentees for the latest week from 'الغياب' and their call status from 'افتقاد'
+export async function getAbsenteesForLatestWeek() {
+  const attendanceSheet = 'الغياب';
+  const iftikadSheet = 'افتقاد';
+  // Get attendance structure
+  const { headers, names, nameColIndex, rows } = await getAttendanceSheetStructure(attendanceSheet);
+  // Find latest date column (last non-empty header after the name column)
+  let lastDateColIndex = headers.length - 1;
+  while (lastDateColIndex > nameColIndex && !headers[lastDateColIndex]) lastDateColIndex--;
+  const week = headers[lastDateColIndex];
+  // Get absentees (empty or 0 in that column)
+  const absentees = rows.slice(1).filter(row => {
+    const val = row[lastDateColIndex];
+    return !val || val === '0' || val === 0;
+  }).map(row => ({
+    name: row[nameColIndex],
+    phone: row[nameColIndex + 1],
+  }));
+
+  // Get iftikad data
+  const iftikadResp = await sheets.spreadsheets.values.get({
+    spreadsheetId: SHEET_ID,
+    range: `${iftikadSheet}!A1:Z1000`,
+  });
+  const iftikadRows = iftikadResp.data.values || [];
+  const iftikadHeaders = iftikadRows[0] || [];
+  const nameIdx = iftikadHeaders.findIndex(h => h.trim() === 'الاسم');
+  const weekIdx = iftikadHeaders.findIndex(h => h.trim() === 'تاريخ الغياب');
+  const calledIdx = iftikadHeaders.findIndex(h => h.trim() === 'تم الاتصال');
+  const callDateIdx = iftikadHeaders.findIndex(h => h.trim() === 'تاريخ الاتصال');
+  const notesIdx = iftikadHeaders.findIndex(h => h.trim() === 'ملاحظات');
+
+  // Merge call status
+  const result = absentees.map(abs => {
+    const found = iftikadRows.find(row => row[nameIdx] === abs.name && row[weekIdx] === week);
+    return {
+      name: abs.name,
+      phone: abs.phone,
+      week,
+      called: found ? found[calledIdx] : 'لا',
+      callDate: found ? found[callDateIdx] : '',
+      notes: found ? found[notesIdx] : '',
+    };
+  });
+  return result;
+}
+
+// Mark a person as called in 'افتقاد' for the given week
+export async function markAsCalled(name, week) {
+  const iftikadSheet = 'افتقاد';
+  const resp = await sheets.spreadsheets.values.get({
+    spreadsheetId: SHEET_ID,
+    range: `${iftikadSheet}!A1:Z1000`,
+  });
+  const rows = resp.data.values || [];
+  const headers = rows[0] || [];
+  const nameIdx = headers.findIndex(h => h.trim() === 'الاسم');
+  const weekIdx = headers.findIndex(h => h.trim() === 'تاريخ الغياب');
+  const calledIdx = headers.findIndex(h => h.trim() === 'تم الاتصال');
+  const callDateIdx = headers.findIndex(h => h.trim() === 'تاريخ الاتصال');
+  // Find row
+  const rowIdx = rows.findIndex(row => row[nameIdx] === name && row[weekIdx] === week);
+  const today = new Date().toISOString().slice(0, 10);
+  if (rowIdx !== -1) {
+    // Update existing row
+    const calledCell = String.fromCharCode(65 + calledIdx) + (rowIdx + 1);
+    const callDateCell = String.fromCharCode(65 + callDateIdx) + (rowIdx + 1);
+    await updateCell(iftikadSheet, calledCell, 'نعم');
+    await updateCell(iftikadSheet, callDateCell, today);
+  } else {
+    // Append new row
+    const newRow = Array(headers.length).fill('');
+    newRow[nameIdx] = name;
+    newRow[weekIdx] = week;
+    newRow[calledIdx] = 'نعم';
+    newRow[callDateIdx] = today;
+    await appendRow(iftikadSheet, newRow);
+  }
+}
+
+// Get absentees for a specific week from 'الغياب' and their call status from 'افتقاد'
+export async function getAbsenteesForWeek(week) {
+  const attendanceSheet = 'الغياب';
+  const iftikadSheet = 'افتقاد';
+  const { headers, names, nameColIndex, rows } = await getAttendanceSheetStructure(attendanceSheet);
+  let weekColIndex;
+  if (week) {
+    weekColIndex = headers.findIndex(h => h && h.trim() === week.trim());
+    if (weekColIndex === -1) throw new Error('Week not found');
+  } else {
+    weekColIndex = headers.length - 1;
+    while (weekColIndex > nameColIndex && !headers[weekColIndex]) weekColIndex--;
+    week = headers[weekColIndex];
+  }
+  const absentees = rows.slice(1).filter(row => {
+    const val = row[weekColIndex];
+    return !val || val === '0' || val === 0;
+  }).map(row => ({
+    name: row[nameColIndex],
+    phone: row[nameColIndex + 1],
+  }));
+  const iftikadResp = await sheets.spreadsheets.values.get({
+    spreadsheetId: SHEET_ID,
+    range: `${iftikadSheet}!A1:Z1000`,
+  });
+  const iftikadRows = iftikadResp.data.values || [];
+  const iftikadHeaders = iftikadRows[0] || [];
+  const nameIdx = iftikadHeaders.findIndex(h => h.trim() === 'الاسم');
+  const weekIdx = iftikadHeaders.findIndex(h => h.trim() === 'تاريخ الغياب');
+  const calledIdx = iftikadHeaders.findIndex(h => h.trim() === 'تم الاتصال');
+  const callDateIdx = iftikadHeaders.findIndex(h => h.trim() === 'تاريخ الاتصال');
+  const notesIdx = iftikadHeaders.findIndex(h => h.trim() === 'ملاحظات');
+  const result = absentees.map(abs => {
+    const found = iftikadRows.find(row => row[nameIdx] === abs.name && row[weekIdx] === week);
+    return {
+      name: abs.name,
+      phone: abs.phone,
+      week,
+      called: found ? found[calledIdx] : 'لا',
+      callDate: found ? found[callDateIdx] : '',
+      notes: found ? found[notesIdx] : '',
+    };
+  });
+  return result;
+}
+
+// Get all missed weeks for a user, with call status
+export async function getUserAbsenceHistory(name) {
+  const attendanceSheet = 'الغياب';
+  const iftikadSheet = 'افتقاد';
+  const { headers, names, nameColIndex, rows } = await getAttendanceSheetStructure(attendanceSheet);
+  const userRow = rows.slice(1).find(row => row[nameColIndex] === name);
+  if (!userRow) return [];
+  // Find all week columns (headers after name column)
+  const weekHeaders = headers.slice(nameColIndex + 2); // skip name and phone
+  const missedWeeks = [];
+  for (let i = nameColIndex + 2; i < headers.length; i++) {
+    const week = headers[i];
+    const val = userRow[i];
+    if (week && (!val || val === '0' || val === 0)) {
+      missedWeeks.push(week);
+    }
+  }
+  // Get iftikad data
+  const iftikadResp = await sheets.spreadsheets.values.get({
+    spreadsheetId: SHEET_ID,
+    range: `${iftikadSheet}!A1:Z1000`,
+  });
+  const iftikadRows = iftikadResp.data.values || [];
+  const iftikadHeaders = iftikadRows[0] || [];
+  const nameIdx = iftikadHeaders.findIndex(h => h.trim() === 'الاسم');
+  const weekIdx = iftikadHeaders.findIndex(h => h.trim() === 'تاريخ الغياب');
+  const calledIdx = iftikadHeaders.findIndex(h => h.trim() === 'تم الاتصال');
+  const callDateIdx = iftikadHeaders.findIndex(h => h.trim() === 'تاريخ الاتصال');
+  const notesIdx = iftikadHeaders.findIndex(h => h.trim() === 'ملاحظات');
+  // For each missed week, get call status
+  return missedWeeks.map(week => {
+    const found = iftikadRows.find(row => row[nameIdx] === name && row[weekIdx] === week);
+    return {
+      week,
+      called: found ? found[calledIdx] : 'لا',
+      callDate: found ? found[callDateIdx] : '',
+      notes: found ? found[notesIdx] : '',
+    };
+  });
+}

@@ -2,6 +2,8 @@ import { ThemeProvider } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
 import theme from '../src/theme';
 import Head from 'next/head';
+import '../styles/globals.css';
+import Header from '../src/components/Header';
 
 export default function MyApp({ Component, pageProps }) {
   return (
@@ -12,6 +14,7 @@ export default function MyApp({ Component, pageProps }) {
         <link rel="icon" href="/icon/icon.png" />
       </Head>
       <CssBaseline />
+      <Header />
       <Component {...pageProps} />
     </ThemeProvider>
   );

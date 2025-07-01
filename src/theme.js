@@ -3,26 +3,26 @@ import { createTheme } from '@mui/material/styles';
 const theme = createTheme({
   palette: {
     primary: {
-      main: '#8B1A1A', // Deep Red
-      contrastText: '#fff',
+      main: '#8c1d19', // Logo Deep Red
+      contrastText: '#fdfcfa', // Logo Off-White
     },
     secondary: {
-      main: '#F9D950', // Gold
-      contrastText: '#3B1F0B',
+      main: '#eab368', // Logo Gold
+      contrastText: '#44271c', // Logo Brown
     },
     background: {
-      default: '#F9F5E1', // Cream
-      paper: '#FFFFFF',   // White
+      default: '#fdfcfa', // Logo Off-White
+      paper: '#fff',
     },
     text: {
-      primary: '#3B1F0B', // Dark Brown
-      secondary: '#8B1A1A', // Deep Red
+      primary: '#44271c', // Logo Brown
+      secondary: '#8c1d19', // Logo Deep Red
     },
     warning: {
-      main: '#D97B29', // Muted Orange
+      main: '#eab368', // Logo Gold
     },
     info: {
-      main: '#F4C6A5', // Peach
+      main: '#9b7152', // Logo Tan
     },
   },
   typography: {
