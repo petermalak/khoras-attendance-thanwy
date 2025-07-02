@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, createContext, useContext } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import {
@@ -14,6 +14,21 @@ import VisibilityIcon from '@mui/icons-material/Visibility';
 
 const QUEUE_KEY = 'attendance_queue';
 
+export const LoadingContext = createContext();
+
+export function LoadingProvider({ children }) {
+  const [loading, setLoading] = useState(false);
+  return (
+    <LoadingContext.Provider value={{ loading, setLoading }}>
+      {children}
+    </LoadingContext.Provider>
+  );
+}
+
+export function useLoading() {
+  return useContext(LoadingContext);
+}
+
 export default function CombinedApp() {
   // Splash screen state
   const [showSplash, setShowSplash] = useState(true);
@@ -22,7 +37,7 @@ export default function CombinedApp() {
   // Selector states
   const [names, setNames] = useState([]);
   const [dates, setDates] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const { loading: globalLoading, setLoading } = useLoading();
   const [error, setError] = useState(null);
   const [selectedName, setSelectedName] = useState("");
   const [selectedDate, setSelectedDate] = useState("");
@@ -198,7 +213,7 @@ export default function CombinedApp() {
               </Link>
             </Box>
             <Paper elevation={3} sx={{ p: 3, borderRadius: 2, backgroundColor: 'white', mb: 3 }}>
-              {loading ? (
+              {globalLoading ? (
                 <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
                   <CircularProgress />
                 </Box>

@@ -22,6 +22,7 @@ import SearchIcon from '@mui/icons-material/Search';
 import HomeIcon from '@mui/icons-material/Home';
 import CardGiftcardIcon from '@mui/icons-material/CardGiftcard';
 import Link from 'next/link';
+import { useLoading } from '../src/CombinedApp';
 
 export default function AttendanceView() {
   const [data, setData] = useState([]);
@@ -33,8 +34,10 @@ export default function AttendanceView() {
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const [giftSuccess, setGiftSuccess] = useState(false);
   const [giftError, setGiftError] = useState(null);
+  const { loading: globalLoading, setLoading: setGlobalLoading } = useLoading();
 
   const fetchData = async () => {
+    setGlobalLoading(true);
     try {
       const response = await fetch('/api/attendance-records');
       if (!response.ok) throw new Error('Failed to fetch data');
@@ -45,6 +48,7 @@ export default function AttendanceView() {
       setError('حدث خطأ أثناء جلب البيانات');
     } finally {
       setLoading(false);
+      setGlobalLoading(false);
     }
   };
 
@@ -53,6 +57,7 @@ export default function AttendanceView() {
   }, []);
 
   const handleGiftClick = async (name) => {
+    setGlobalLoading(true);
     try {
       const response = await fetch('/api/attendance-records', {
         method: 'POST',
@@ -68,6 +73,8 @@ export default function AttendanceView() {
       fetchData(); // Refresh data
     } catch (err) {
       setGiftError('حدث خطأ أثناء تحديث عدد الهدايا');
+    } finally {
+      setGlobalLoading(false);
     }
   };
 
@@ -105,17 +112,7 @@ export default function AttendanceView() {
   };
 
   if (loading) {
-    return (
-      <Box sx={{ 
-        display: 'flex', 
-        justifyContent: 'center', 
-        alignItems: 'center', 
-        height: '100vh',
-        backgroundColor: '#f9f5e1'
-      }}>
-        <CircularProgress />
-      </Box>
-    );
+    return null;
   }
 
   if (error) {
@@ -276,7 +273,8 @@ export default function AttendanceView() {
                           size="small"
                           startIcon={<CardGiftcardIcon />}
                           onClick={() => handleGiftClick(row['الاسم'])}
-                          sx={{ minWidth: '120px' }}
+                          sx={{ minWidth: '120px', opacity: globalLoading ? 0.5 : 1, pointerEvents: globalLoading ? 'none' : 'auto' }}
+                          disabled={globalLoading}
                         >
                           تسجيل هدية
                         </Button>
